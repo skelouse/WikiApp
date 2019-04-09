@@ -12,7 +12,6 @@ from kivy.core.window import Window
 from kivy.uix.scrollview import ScrollView
 from kivy.uix.popup import Popup
 
-
 class SelectBtn(Button):
     def __init__(self, **kwargs):
         super(SelectBtn, self).__init__(**kwargs)
@@ -20,6 +19,7 @@ class SelectBtn(Button):
         self.size_hint_x = None
         self.height = Window.height/4.0
         self.width = Window.width/1.22
+
 
 class SelectSearch(Popup):
     def __init__(self, search_param=0,
@@ -54,16 +54,12 @@ class SelectSearch(Popup):
         self._parent.search(event.text, self.search_param)
         
 
-
-
-
 class SearchG(Screen):
     def __init__(self, **kwargs):
         super(SearchG, self).__init__(**kwargs)
         self.wait_time = 0.3
         self.pos_in_text = 0
         self.paused = False
-
         self.searchbtn = Button(text="Search",
                           font_size='40dp',
                           pos_hint={'center_x':.5, 'center_y':.5},
@@ -71,31 +67,24 @@ class SearchG(Screen):
                           size=(Window.width/4, Window.height/6))
         self.searchbtn.bind(on_press=self.search1)
         self.add_widget(self.searchbtn)
-
         self.upspeedbtn = Button(text="+",
                           font_size='80dp',
                           pos_hint={'center_x':.9, 'center_y':.9},
                           size_hint=(None, None),
                           size=(Window.width/8, Window.height/8))
         self.upspeedbtn.bind(on_press=self.upspeed)
-        #self.add_widget(self.upspeedbtn)
-
         self.downspeedbtn = Button(text="-",
                           font_size='80dp',
                           pos_hint={'center_x':.9, 'center_y':.75},
                           size_hint=(None, None),
                           size=(Window.width/8, Window.height/8))
         self.downspeedbtn.bind(on_press=self.downspeed)
-        #self.add_widget(self.downspeedbtn)
-
         self.pausebtn = Button(text="Pause",
                           font_size='40dp',
                           pos_hint={'center_x':.2, 'center_y':.1},
                           size_hint=(None, None),
                           size=(Window.width/4, Window.height/6))
         self.pausebtn.bind(on_press=self.pause)
-        #self.add_widget(self.pausebtn)
-
         self.txt = TextInput(text="",
                           font_size='40dp',
                           pos_hint={'center_x':.5, 'center_y':.8},
@@ -107,7 +96,6 @@ class SearchG(Screen):
                           pos_hint={'center_x':.5, 'center_y':.5},
                           size_hint=(None, None),
                           size=(Window.width/4, Window.height/6))
-
         self.stopbtn = Button(text="Stop",
                           font_size='40dp',
                           pos_hint={'center_x':.8, 'center_y':.1},
@@ -121,11 +109,9 @@ class SearchG(Screen):
         popup = SelectSearch(a, self)
         popup.open()
 
-        
     def search(self, position, a):
-        self.content = ((wikipedia.page(a[a.index(position)]).content).split())
-
         if self.pos_in_text == 0:
+            self.content = ((wikipedia.page(a[a.index(position)]).content).split())
             self.remove_widget(self.searchbtn)
             self.remove_widget(self.txt)
             self.remove_widget(self.downspeedbtn)
@@ -146,11 +132,13 @@ class SearchG(Screen):
 
     def upspeed(self ,event):
         self.wait_time -= .05
-        self.search(1)
+        Clock.unschedule(self.read_text)
+        Clock.schedule_interval(self.read_text, self.wait_time)
 
     def downspeed(self, event):
         self.wait_time += .05
-        self.search(1)
+        Clock.unschedule(self.read_text)
+        Clock.schedule_interval(self.read_text, self.wait_time)
 
     def pause(self, event):
         if self.paused:
@@ -181,12 +169,6 @@ class WikiApp(App):
         sm.add_widget(SearchG(name='search'))
         return sm
 
-
-sm = ScreenManager(transition=NoTransition())
-
-
 if __name__ == ("__main__"):
+    sm = ScreenManager(transition=NoTransition())
     WikiApp().run()
-
-
-
