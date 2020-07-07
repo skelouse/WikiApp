@@ -1,6 +1,7 @@
-import wikipedia
 import os
-import kivy
+import wikipedia
+from functools import partial
+
 from kivy.app import App
 from kivy.uix.label import Label
 from kivy.uix.gridlayout import GridLayout
@@ -10,165 +11,258 @@ from kivy.clock import Clock
 from kivy.uix.screenmanager import Screen, ScreenManager, NoTransition
 from kivy.core.window import Window
 from kivy.uix.scrollview import ScrollView
-from kivy.uix.popup import Popup
+from kivy.uix.modalview import ModalView
+from kivy.uix.slider import Slider
+from kivy.graphics import Rectangle
+from kivy.properties import StringProperty, ListProperty, BooleanProperty, NumericProperty
+from kivy.utils import platform
 
-class SelectBtn(Button):
+from sys import platform as sysplatform
+if sysplatform == 'linux' or sysplatform == 'win32':
+    from kivy.config import Config
+    Config.set('graphics', 'position', 'custom')
+    Config.set('graphics', 'left', 0)
+    Config.set('graphics', 'top', 0)
+    Config.set('graphics', 'height', 496)
+    Config.set('graphics', 'width', 800)
+    Config.write()
+
+class ScreenMan(ScreenManager):
+    background = './img/background.jpg'
     def __init__(self, **kwargs):
-        super(SelectBtn, self).__init__(**kwargs)
-        self.font_size = '40dp'
-        self.size_hint_x = None
-        self.height = Window.height/4.0
-        self.width = Window.width/1.22
+        super(ScreenMan, self).__init__(**kwargs)
+        with self.canvas.before:
+            self.rect = Rectangle(size=self.size,
+                              pos=self.pos,
+                              source=self.background)
+        self.bind(pos=self.update_rect, size=self.update_rect)
+
+    def update_rect(self, instance, value):
+        instance.rect.pos = instance.pos
+        instance.rect.size = instance.size
+sm = ScreenMan(transition=NoTransition())
 
 
-class SelectSearch(Popup):
-    def __init__(self, search_param=0,
-                 _parent=0, a=0, **kwargs):
-        super(SelectSearch, self).__init__(**kwargs)
-        self._parent = _parent
-        self.title = 'Select an option'
+class SelectModal(ModalView):
+    search_param = ListProperty([])
+    
+    title = 'Select an option'
+    def __init__(self, selection_callback, **kwargs):
+        super(SelectModal, self).__init__(**kwargs)
+        self.search_param=['Test', 'Bechdel test', '.test', 'COVID-19 testing', 'Test (assessment)', 'TeST Gliders', 'Standardized test', 'Mirror test', 'Turing test', 'ACT (test)'] #test
+        self.selection_callback = selection_callback
         self.layout = ScrollView(
-            scroll_type=['bars'],
-            bar_width='80dp',
-            size=(Window.width, Window.height),
-            pos_hint={'center_x': .5},
-            bar_color=([.81, .55, .55, 1]),  #
-            bar_inactive_color=([.55, .17, .17, 1]))  #)
-        
+            size_hint=(1, 1),
+            pos_hint={'center_x': .5}
+        )
         self.grid = GridLayout(
             size_hint=(None, 2),
-            cols=1
+            cols=1,
+            spacing=5
         )
-        self.search_param = search_param
-        for i in search_param:
-            self.btn = SelectBtn()
-            self.btn.text = i
-            self.btn.bind(on_press=self.callback)
-            self.grid.add_widget(self.btn)
-
         self.layout.add_widget(self.grid)
         self.add_widget(self.layout)
     
-    def callback(self, event):
-        self.dismiss()
-        self._parent.search(event.text, self.search_param)
-        
+    def on_open(self):
+        self.grid.clear_widgets(self.grid.children)
+        for n, label in enumerate(self.search_param):
+            btn = Button(
+                text=label,
+                font_size='50dp',
+                size_hint_x=None,
+                width=Window.width,
+                height=Window.height/5.0
+            )
+            btn.num = n
+            btn.bind(on_press=self.selection_callback,
+                     on_release=self.dismiss)
+            self.grid.add_widget(btn)
 
-class SearchG(Screen):
+
+class MainScreen(Screen):
     def __init__(self, **kwargs):
-        super(SearchG, self).__init__(**kwargs)
-        self.wait_time = 0.3
-        self.pos_in_text = 0
-        self.paused = False
-        self.searchbtn = Button(text="Search",
-                          font_size='40dp',
-                          pos_hint={'center_x':.5, 'center_y':.5},
-                          size_hint=(None, None),
-                          size=(Window.width/4, Window.height/6))
-        self.searchbtn.bind(on_press=self.search1)
+        super(MainScreen, self).__init__(**kwargs)
+        self.app = App.get_running_app()
+        self.searchbtn = Button(
+            text='Search',
+            font_size='40dp',
+            pos_hint={'center_x': .5, 'center_y': .5},
+            size_hint=(.4, .1)
+        )
+        self.searchbtn.bind(on_release=self.search)
         self.add_widget(self.searchbtn)
-        self.upspeedbtn = Button(text="+",
-                          font_size='80dp',
-                          pos_hint={'center_x':.9, 'center_y':.9},
-                          size_hint=(None, None),
-                          size=(Window.width/8, Window.height/8))
-        self.upspeedbtn.bind(on_press=self.upspeed)
-        self.downspeedbtn = Button(text="-",
-                          font_size='80dp',
-                          pos_hint={'center_x':.9, 'center_y':.75},
-                          size_hint=(None, None),
-                          size=(Window.width/8, Window.height/8))
-        self.downspeedbtn.bind(on_press=self.downspeed)
-        self.pausebtn = Button(text="Pause",
-                          font_size='40dp',
-                          pos_hint={'center_x':.2, 'center_y':.1},
-                          size_hint=(None, None),
-                          size=(Window.width/4, Window.height/6))
-        self.pausebtn.bind(on_press=self.pause)
-        self.txt = TextInput(text="",
-                          font_size='40dp',
-                          pos_hint={'center_x':.5, 'center_y':.8},
-                          size_hint=(None, None),
-                          size=(Window.width/4, Window.height/6))
+
+        self.txt = TextInput(
+            text="",
+            font_size='40dp',
+            pos_hint={'center_x': .5, 'center_y': .8},
+            size_hint=(.8, .2)
+        )
         self.add_widget(self.txt)
-        self.text_label = Label(text="",
-                          font_size='80dp',
-                          pos_hint={'center_x':.5, 'center_y':.5},
-                          size_hint=(None, None),
-                          size=(Window.width/4, Window.height/6))
-        self.stopbtn = Button(text="Stop",
-                          font_size='40dp',
-                          pos_hint={'center_x':.8, 'center_y':.1},
-                          size_hint=(None, None),
-                          size=(Window.width/4, Window.height/6))
+
+    def search(self, event):
+        self.app.modal.search_param = wikipedia.search(
+                                        str(self.txt.text))
+        
+        self.app.modal.open()
+
+
+class ReaderScreen(Screen):
+    content=ListProperty([])
+    paused=BooleanProperty(True)
+    pos_in_text=NumericProperty(0)
+    def __init__(self, **kwargs):
+        # test
+        # with open('./testdata.txt', 'r', encoding='utf-8') as f:
+        #     self.content = eval(f.read())
+        if platform == 'android':
+            slider_cursor_size = (200, 200)
+        else:
+            slider_cursor_size = (80, 80)
+        super(ReaderScreen, self).__init__(**kwargs)
+        self.startbtn = Button(
+            text='Start',
+            font_size='60dp',
+            pos_hint={'center_x': .5, 'center_y': .5},
+            size_hint=(.6, .2)
+        )
+        self.startbtn.bind(on_release=self.start)
+        self.add_widget(self.startbtn)
+
+        self.pausebtn = Button(
+            text="Pause",
+            font_size='40dp',
+            pos_hint={'center_x':.2, 'center_y':.1},
+            size_hint=(.3, .1))
+        self.pausebtn.bind(on_press=self.pause)
+        self.add_widget(self.pausebtn)
+
+        self.text_label = Label(
+            text="",
+            font_size='45dp',
+            pos_hint={'center_x':.5, 'center_y':.7},
+            size_hint=(.1, 1)
+            )
+        self.add_widget(self.text_label)
+
+        self.stopbtn = Button(
+            text="Stop",
+            font_size='40dp',
+            pos_hint={'center_x':.8, 'center_y':.1},
+            size_hint=(.3, .1),
+        )
         self.stopbtn.bind(on_press=self.stop)
+        self.add_widget(self.stopbtn)
 
+        self.fontslider = Slider(
+            orientation='horizontal',
+            step=1,
+            value=55,
+            range=(10, 100),
+            pos_hint={'center_x': .5, 'center_y': .35},
+            cursor_size=slider_cursor_size,
+            size_hint=(.9, .1)
+        )
+        self.add_widget(self.fontslider)
 
-    def search1(self, event):
-        a = wikipedia.search(str(self.txt.text))
-        popup = SelectSearch(a, self)
-        popup.open()
+        self.speedslider = Slider(
+            orientation='horizontal',
+            step=.00001,
+            value=.25,
+            range=(.01, .47),
+            pos_hint={'center_x': .5, 'center_y': .2},
+            cursor_image="./img/bunny.png",
+            cursor_size=slider_cursor_size,
+            size_hint=(.9, .1)
+        )
+        self.speedslider.defaultvalue=1
+        self.add_widget(self.speedslider)
 
-    def search(self, position, a):
-        if self.pos_in_text == 0:
-            self.content = ((wikipedia.page(a[a.index(position)]).content).split())
-            self.remove_widget(self.searchbtn)
-            self.remove_widget(self.txt)
-            self.remove_widget(self.downspeedbtn)
-            self.remove_widget(self.upspeedbtn)
-            self.remove_widget(self.pausebtn)
-            self.remove_widget(self.stopbtn)
-            self.add_widget(self.downspeedbtn)
-            self.add_widget(self.upspeedbtn)
-            self.add_widget(self.pausebtn)
-            self.add_widget(self.text_label)
-            self.add_widget(self.stopbtn)
-        Clock.unschedule(self.read_text)
-        Clock.schedule_interval(self.read_text, self.wait_time)
+        self.wpm = Label(
+            text='WPM - 240',
+            pos_hint={'center_x': .5, 'center_y': .1},
+            font_size='40dp',
+            size_hint=(.1, .1)
+        )
+        self.add_widget(self.wpm)
 
-    def read_text(self, dt):
-        self.text_label.text = self.content[self.pos_in_text]
-        self.pos_in_text += 1
+    def reset_read(self):
+        value = .5 - self.speedslider.value
+        self.wpm.text = self.calc(value)
+        if not self.paused:
+                Clock.unschedule(self.read_text)
+                Clock.schedule_interval(self.read_text, value)
+    def calc(self, value):
+        try:
+            value = (1/value)* 60
+            return "WPM - %s" % str(int(value))
+        except ZeroDivisionError:
+            return 'WPM -'
 
-    def upspeed(self ,event):
-        self.wait_time -= .05
-        Clock.unschedule(self.read_text)
-        Clock.schedule_interval(self.read_text, self.wait_time)
+    def on_touch_up(self, touch):
+        if self.speedslider.collide_point(*touch.pos):
+            self.reset_read()
+        if self.fontslider.collide_point(*touch.pos):
+            self.text_label.font_size = "%sdp" % self.fontslider.value
+        return super().on_touch_up(touch)
 
-    def downspeed(self, event):
-        self.wait_time += .05
-        Clock.unschedule(self.read_text)
-        Clock.schedule_interval(self.read_text, self.wait_time)
-
+    def start(self, event):
+        self.paused = False
+        self.remove_widget(event)
+        self.reset_read()
+    
     def pause(self, event):
         if self.paused:
-            Clock.schedule_interval(self.read_text, self.wait_time)
+            self.pausebtn.text = 'Pause'
+            self.reset_read()
             self.paused = False
         else:
+            self.pausebtn.text = 'Start'
             self.paused = True
             Clock.unschedule(self.read_text)
 
     def stop(self, event):
-        self.remove_widget(self.searchbtn)
-        self.remove_widget(self.txt)
-        self.remove_widget(self.downspeedbtn)
-        self.remove_widget(self.upspeedbtn)
-        self.remove_widget(self.pausebtn)
-        self.remove_widget(self.stopbtn)
-        self.remove_widget(self.text_label)
-        self.add_widget(self.searchbtn)
-        self.add_widget(self.txt)
-        self.pos_in_text = 0
+        self.add_widget(self.startbtn)
+        self.text_label.text = ''
         Clock.unschedule(self.read_text)
+        sm.current = 'main'
+
+    def read_text(self, dt):
+        try:
+            self.text_label.text = self.content[self.pos_in_text]
+            self.pos_in_text += 1
+        except IndexError:
+            self.text_label.text = '...'
+            Clock.unschedule(self.read_text)
+        
 
 
 class WikiApp(App):
     def __init__(self, **kwargs):
         super(WikiApp, self).__init__(**kwargs)
-    def build(self):
-        sm.add_widget(SearchG(name='search'))
-        return sm
+        self.modal = SelectModal(self.selection_callback)
 
-if __name__ == ("__main__"):
-    sm = ScreenManager(transition=NoTransition())
+    def build(self):
+        sm.add_widget(MainScreen(name='main'))
+        sm.add_widget(ReaderScreen(name='reader'))
+        
+        return sm
+    
+    def set_content(self, event):
+        reader = sm.get_screen('reader')
+        reader.pos_in_text=0
+        reader.content = (
+            (wikipedia.page(
+            event.parent.parent.parent.search_param[event.num]).content).split())
+
+    def selection_callback(self, event):
+        try:
+            self.set_content(event)
+            sm.current='reader'
+        except wikipedia.DisambiguationError as e:
+            self.layermodal = SelectModal(self.selection_callback)
+            self.layermodal.search_param = e.options
+            self.layermodal.open()
+
+if __name__ == "__main__":
     WikiApp().run()
