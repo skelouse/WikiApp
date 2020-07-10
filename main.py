@@ -16,6 +16,7 @@ from kivy.uix.slider import Slider
 from kivy.graphics import Rectangle
 from kivy.properties import StringProperty, ListProperty, BooleanProperty, NumericProperty
 from kivy.utils import platform
+from kivy.core.clipboard import Clipboard
 
 from sys import platform as sysplatform
 if sysplatform == 'linux' or sysplatform == 'win32':
@@ -92,6 +93,15 @@ class MainScreen(Screen):
         self.searchbtn.bind(on_release=self.search)
         self.add_widget(self.searchbtn)
 
+        self.clipbtn = Button(
+            text='Read Clipboard',
+            font_size='40dp',
+            pos_hint={'center_x': .5, 'center_y': .4},
+            size_hint=(.4, .1)
+        )
+        self.clipbtn.bind(on_release=self.readclip)
+        self.add_widget(self.clipbtn)
+
         self.txt = TextInput(
             text="",
             font_size='40dp',
@@ -106,11 +116,18 @@ class MainScreen(Screen):
         
         self.app.modal.open()
 
+    def readclip(self, event):
+        content = Clipboard.paste().replace('\n', ' ').split(' ')
+        self.app.clip_set_content(content)
+
 
 class ReaderScreen(Screen):
     content=ListProperty([])
     paused=BooleanProperty(True)
     pos_in_text=NumericProperty(0)
+    def on_enter(self):
+        self.paused = True
+
     def __init__(self, **kwargs):
         # test
         # with open('./testdata.txt', 'r', encoding='utf-8') as f:
@@ -120,22 +137,14 @@ class ReaderScreen(Screen):
         else:
             slider_cursor_size = (80, 80)
         super(ReaderScreen, self).__init__(**kwargs)
-        self.startbtn = Button(
-            text='Start',
-            font_size='60dp',
-            pos_hint={'center_x': .5, 'center_y': .5},
-            size_hint=(.6, .2)
-        )
-        self.startbtn.bind(on_release=self.start)
-        self.add_widget(self.startbtn)
 
-        self.pausebtn = Button(
-            text="Pause",
+        self.resetbtn = Button(
+            text="Reset",
             font_size='40dp',
             pos_hint={'center_x':.2, 'center_y':.1},
             size_hint=(.3, .1))
-        self.pausebtn.bind(on_press=self.pause)
-        self.add_widget(self.pausebtn)
+        self.resetbtn.bind(on_press=self.reset)
+        self.add_widget(self.resetbtn)
 
         self.text_label = Label(
             text="",
@@ -146,13 +155,21 @@ class ReaderScreen(Screen):
         self.add_widget(self.text_label)
 
         self.stopbtn = Button(
-            text="Stop",
+            text="Exit",
             font_size='40dp',
             pos_hint={'center_x':.8, 'center_y':.1},
             size_hint=(.3, .1),
         )
         self.stopbtn.bind(on_press=self.stop)
         self.add_widget(self.stopbtn)
+
+        self.gobackbtn = Button(
+            text="<<",
+            font_size='60dp',
+            pos_hint={'center_x': .1, 'center_y': .45},
+            size_hint=(.1, .1)
+        )
+        self.add_widget(self.gobackbtn)
 
         self.fontslider = Slider(
             orientation='horizontal',
@@ -186,12 +203,17 @@ class ReaderScreen(Screen):
         )
         self.add_widget(self.wpm)
 
+    def reset(self, event):
+        self.pos_in_text = 0
+        self.read_text(1)
+
     def reset_read(self):
         value = .5 - self.speedslider.value
         self.wpm.text = self.calc(value)
         if not self.paused:
-                Clock.unschedule(self.read_text)
-                Clock.schedule_interval(self.read_text, value)
+            Clock.unschedule(self.read_text)
+            Clock.schedule_interval(self.read_text, value)
+
     def calc(self, value):
         try:
             value = (1/value)* 60
@@ -202,26 +224,28 @@ class ReaderScreen(Screen):
     def on_touch_up(self, touch):
         if self.speedslider.collide_point(*touch.pos):
             self.reset_read()
-        if self.fontslider.collide_point(*touch.pos):
+        elif self.fontslider.collide_point(*touch.pos):
             self.text_label.font_size = "%sdp" % self.fontslider.value
+        elif self.gobackbtn.collide_point(*touch.pos):
+            self.pos_in_text -= 10
+            if self.pos_in_text < 0:
+                self.pos_in_text = 0
+            self.read_text(1)
+        else:
+            self.pause(1)
         return super().on_touch_up(touch)
-
-    def start(self, event):
-        self.paused = False
-        self.remove_widget(event)
-        self.reset_read()
     
     def pause(self, event):
         if self.paused:
-            self.pausebtn.text = 'Pause'
-            self.reset_read()
             self.paused = False
+            self.reset_read()
+            
         else:
-            self.pausebtn.text = 'Start'
             self.paused = True
             Clock.unschedule(self.read_text)
 
     def stop(self, event):
+        self.remove_widget(self.startbtn)
         self.add_widget(self.startbtn)
         self.text_label.text = ''
         Clock.unschedule(self.read_text)
@@ -254,6 +278,12 @@ class WikiApp(App):
         reader.content = (
             (wikipedia.page(
             event.parent.parent.parent.search_param[event.num]).content).split())
+    
+    def clip_set_content(self, content):
+        reader = sm.get_screen('reader')
+        reader.pos_in_text = 0
+        reader.content = content
+        sm.current = 'reader'
 
     def selection_callback(self, event):
         try:
