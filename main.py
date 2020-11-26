@@ -1,3 +1,5 @@
+# add greek letters
+
 import os
 import wikipedia
 from functools import partial
@@ -17,30 +19,35 @@ from kivy.graphics import Rectangle
 from kivy.properties import StringProperty, ListProperty, BooleanProperty, NumericProperty
 from kivy.utils import platform
 from kivy.core.clipboard import Clipboard
+from kivy.core.window import Window
 
 from sys import platform as sysplatform
 if sysplatform == 'linux' or sysplatform == 'win32':
     from kivy.config import Config
     Config.set('graphics', 'position', 'custom')
-    Config.set('graphics', 'left', 0)
-    Config.set('graphics', 'top', 0)
+    Config.set('graphics', 'left', 50)
+    Config.set('graphics', 'top', 40)
     Config.set('graphics', 'height', 496)
     Config.set('graphics', 'width', 800)
     Config.write()
 
+
 class ScreenMan(ScreenManager):
     background = './img/background.jpg'
+
     def __init__(self, **kwargs):
         super(ScreenMan, self).__init__(**kwargs)
         with self.canvas.before:
             self.rect = Rectangle(size=self.size,
-                              pos=self.pos,
-                              source=self.background)
+                                  pos=self.pos,
+                                  source=self.background)
         self.bind(pos=self.update_rect, size=self.update_rect)
 
     def update_rect(self, instance, value):
         instance.rect.pos = instance.pos
         instance.rect.size = instance.size
+
+
 sm = ScreenMan(transition=NoTransition())
 
 
